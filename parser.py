@@ -60,7 +60,10 @@ _ONNX_ACTIVATION_MAP: dict[str, ActivationKind] = {
 # PyTorch ingestion
 # ---------------------------------------------------------------------------
 
-def parse_pytorch(model: "nn.Sequential") -> ParsedNetwork:
+def parse_pytorch(
+    model: "nn.Sequential",
+    relative_degree: int = 1,
+) -> ParsedNetwork:
     """Parse a torch.nn.Sequential CBF model into the unified IR.
 
     Args:
@@ -68,20 +71,31 @@ def parse_pytorch(model: "nn.Sequential") -> ParsedNetwork:
             interleaved with supported activations (ReLU, Softplus, Tanh,
             Sigmoid, Identity). The terminal layer must be Linear with
             output dimension 1.
+        relative_degree: The relative degree of the planned compilation
+            target (1 or 2). When ``relative_degree == 2``, ReLU activations
+            are rejected at parse time because their second derivative
+            vanishes almost everywhere and the resulting hyper-dual code
+            would silently lose the Hessian contribution. Default 1.
 
     Returns:
         Validated ParsedNetwork.
 
     Raises:
         TypeError: If ``model`` is not torch.nn.Sequential.
-        ValueError: If any module is unsupported (Conv, BN, RNN, etc.) or
-            the resulting topology violates feedforward-CBF assumptions.
+        ValueError: If any module is unsupported (Conv, BN, RNN, etc.), if
+            the resulting topology violates feedforward-CBF assumptions,
+            or if ``relative_degree == 2`` and the network uses ReLU.
     """
     import torch.nn as nn  # local import keeps torch optional at top level
 
     if not isinstance(model, nn.Sequential):
         raise TypeError(
             f"parse_pytorch requires torch.nn.Sequential, got {type(model).__name__}"
+        )
+
+    if relative_degree not in (1, 2):
+        raise ValueError(
+            f"relative_degree must be 1 or 2, got {relative_degree}"
         )
 
     parsed = ParsedNetwork()
@@ -113,6 +127,15 @@ def parse_pytorch(model: "nn.Sequential") -> ParsedNetwork:
 
         elif cls_name in _TORCH_ACTIVATION_MAP:
             kind = _TORCH_ACTIVATION_MAP[cls_name]
+            if relative_degree == 2 and kind == "relu":
+                raise ValueError(
+                    "ReLU activations are not allowed when relative_degree=2. "
+                    "ReLU's second derivative vanishes almost everywhere, so the "
+                    "Hessian contribution to L_f^2 h_theta and L_{col_j(G)} L_f h_theta "
+                    "would be lost and the resulting controller would degrade "
+                    "silently. Retrain the network with a twice-differentiable "
+                    "activation such as Softplus, Tanh, or Sigmoid."
+                )
             parsed.layers.append(ActivationLayer(kind=kind))
 
         elif isinstance(module, nn.Flatten):
@@ -134,7 +157,7 @@ def parse_pytorch(model: "nn.Sequential") -> ParsedNetwork:
 # ONNX ingestion
 # ---------------------------------------------------------------------------
 
-def parse_onnx(file_path: str) -> ParsedNetwork:
+def parse_onnx(file_path: str, relative_degree: int = 1) -> ParsedNetwork:
     """Parse an ONNX model file into the unified IR.
 
     Walks the ONNX computational graph and pattern-matches sequences of
@@ -143,6 +166,9 @@ def parse_onnx(file_path: str) -> ParsedNetwork:
 
     Args:
         file_path: Path to a .onnx model file.
+        relative_degree: The relative degree of the planned compilation
+            target (1 or 2). When ``relative_degree == 2``, ReLU activations
+            are rejected at parse time. Default 1.
 
     Returns:
         Validated ParsedNetwork.
@@ -150,8 +176,9 @@ def parse_onnx(file_path: str) -> ParsedNetwork:
     Raises:
         ImportError: If onnx is not installed.
         ValueError: If the graph contains disallowed ops (Conv, BN, RNN,
-            attention, pooling, dropout) or cannot be reduced to an
-            alternating Linear/activation sequence.
+            attention, pooling, dropout), if it cannot be reduced to an
+            alternating Linear/activation sequence, or if
+            ``relative_degree == 2`` and the network uses ReLU.
     """
     try:
         import onnx
@@ -160,6 +187,9 @@ def parse_onnx(file_path: str) -> ParsedNetwork:
         raise ImportError(
             "parse_onnx requires the 'onnx' package. Install with: pip install onnx"
         ) from exc
+
+    if relative_degree not in (1, 2):
+        raise ValueError(f"relative_degree must be 1 or 2, got {relative_degree}")
 
     model = onnx.load(file_path)
     graph = model.graph
@@ -247,7 +277,17 @@ def parse_onnx(file_path: str) -> ParsedNetwork:
             i += consumed
 
         elif op in _ONNX_ACTIVATION_MAP:
-            parsed.layers.append(ActivationLayer(kind=_ONNX_ACTIVATION_MAP[op]))
+            kind = _ONNX_ACTIVATION_MAP[op]
+            if relative_degree == 2 and kind == "relu":
+                raise ValueError(
+                    "ReLU activations are not allowed when relative_degree=2. "
+                    "ReLU's second derivative vanishes almost everywhere, so the "
+                    "Hessian contribution to L_f^2 h_theta and L_{col_j(G)} L_f h_theta "
+                    "would be lost and the resulting controller would degrade "
+                    "silently. Retrain the network with a twice-differentiable "
+                    "activation such as Softplus, Tanh, or Sigmoid."
+                )
+            parsed.layers.append(ActivationLayer(kind=kind))
             i += 1
 
         elif op in {"Reshape", "Flatten", "Identity"}:

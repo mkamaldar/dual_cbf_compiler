@@ -484,3 +484,48 @@ def test_parser_requires_scalar_output() -> None:
     )
     with pytest.raises(ValueError, match="output dimension"):
         parse_pytorch(model)
+
+
+def test_parser_rejects_relu_when_relative_degree_2() -> None:
+    """parse_pytorch refuses ReLU networks for relative_degree=2."""
+    model = nn.Sequential(
+        nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 1)
+    )
+    with pytest.raises(ValueError, match="ReLU"):
+        parse_pytorch(model, relative_degree=2)
+
+
+def test_parser_accepts_softplus_when_relative_degree_2() -> None:
+    """Smooth activations pass parse_pytorch with relative_degree=2."""
+    model = nn.Sequential(
+        nn.Linear(4, 8), nn.Softplus(), nn.Linear(8, 1)
+    )
+    parsed = parse_pytorch(model, relative_degree=2)
+    assert parsed.depth == 2
+
+
+def test_emitter_rejects_relu_relative_degree_2() -> None:
+    """emit_cpp_header refuses ReLU networks for relative_degree=2 even if
+    they slipped past parsing (e.g. were constructed by hand)."""
+    from dual_cbf_compiler.ir import (
+        ActivationLayer as IRA,
+        LinearLayer as IRL,
+        ParsedNetwork as IRP,
+    )
+    net = IRP(layers=[
+        IRL(W=np.zeros((4, 3), dtype=np.float32), b=np.zeros(4, dtype=np.float32)),
+        IRA("relu"),
+        IRL(W=np.zeros((1, 4), dtype=np.float32), b=np.zeros(1, dtype=np.float32)),
+    ])
+    with pytest.raises(ValueError, match="ReLU"):
+        emit_cpp_header(net, relative_degree=2)
+
+
+def test_emitter_documents_row_major_g() -> None:
+    """Generated header includes the row-major G layout reminder."""
+    model = nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 1))
+    parsed = parse_pytorch(model)
+    header = emit_cpp_header(parsed, relative_degree=1)
+    assert "ROW-MAJOR" in header
+    assert "G[i * m + j]" in header
+    assert "G2D" in header

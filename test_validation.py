@@ -71,6 +71,51 @@ def test_validate_alternating():
     raise AssertionError("expected ValueError")
 
 
+def test_emitter_rejects_relu_relative_degree_2():
+    """Hard error when emitting hyper-dual code for a ReLU network."""
+    from dual_cbf_compiler.emitter import emit_cpp_header
+    net = ParsedNetwork(layers=[
+        LinearLayer(W=np.zeros((4, 3), dtype=np.float32), b=np.zeros(4, dtype=np.float32)),
+        ActivationLayer("relu"),
+        LinearLayer(W=np.zeros((1, 4), dtype=np.float32), b=np.zeros(1, dtype=np.float32)),
+    ])
+    try:
+        emit_cpp_header(net, relative_degree=2)
+    except ValueError as e:
+        msg = str(e).lower()
+        assert "relu" in msg
+        assert "relative_degree=2" in msg or "second derivative" in msg
+        return
+    raise AssertionError("expected ValueError for ReLU + relative_degree=2")
+
+
+def test_emitter_accepts_softplus_relative_degree_2():
+    """Smooth activations are fine for hyper-dual."""
+    from dual_cbf_compiler.emitter import emit_cpp_header
+    net = ParsedNetwork(layers=[
+        LinearLayer(W=np.zeros((4, 3), dtype=np.float32), b=np.zeros(4, dtype=np.float32)),
+        ActivationLayer("softplus"),
+        LinearLayer(W=np.zeros((1, 4), dtype=np.float32), b=np.zeros(1, dtype=np.float32)),
+    ])
+    header = emit_cpp_header(net, relative_degree=2)
+    assert "evaluate_cbf_2nd_order" in header
+    assert "ROW-MAJOR" in header  # documentation reminder is present
+
+
+def test_emitter_documents_row_major_layout():
+    """Generated header explains the row-major G layout prominently."""
+    from dual_cbf_compiler.emitter import emit_cpp_header
+    net = ParsedNetwork(layers=[
+        LinearLayer(W=np.zeros((4, 3), dtype=np.float32), b=np.zeros(4, dtype=np.float32)),
+        ActivationLayer("relu"),
+        LinearLayer(W=np.zeros((1, 4), dtype=np.float32), b=np.zeros(1, dtype=np.float32)),
+    ])
+    header = emit_cpp_header(net, relative_degree=1)
+    assert "ROW-MAJOR" in header
+    assert "G[i * m + j]" in header
+    assert "G2D" in header  # the worked-example block is present
+
+
 def test_widths_and_depth():
     net = ParsedNetwork(layers=[
         LinearLayer(W=np.zeros((8, 4), dtype=np.float32), b=np.zeros(8, dtype=np.float32)),
@@ -94,6 +139,9 @@ def main():
         test_validate_scalar_output,
         test_validate_alternating,
         test_widths_and_depth,
+        test_emitter_rejects_relu_relative_degree_2,
+        test_emitter_accepts_softplus_relative_degree_2,
+        test_emitter_documents_row_major_layout,
     ]
     n_pass = 0
     for fn in fns:
