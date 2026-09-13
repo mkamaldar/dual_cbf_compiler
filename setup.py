@@ -18,11 +18,16 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/mkamaldar/dual_cbf_compiler",
-    license="MIT",
+        project_urls={
+        "Paper": "https://arxiv.org/pdf/2604.23995",
+        "Source": "https://github.com/mkamaldar/dual_cbf_compiler",
+        "Hardware experiments": "https://github.com/mkamaldar/dual_cbf_esp32_experiments",
+    },
+    license="Apache-2.0",
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: Apache Software License",
         "Operating System :: POSIX :: Linux",
         "Operating System :: MacOS",
         "Programming Language :: Python :: 3",
