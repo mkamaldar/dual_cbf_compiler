@@ -6,6 +6,20 @@ The generated code performs zero dynamic memory allocation and is suitable for
 deployment on resource-constrained microcontrollers running kilohertz-rate
 safety filters.
 
+## Status and intended use
+
+This is research software released to accompany peer-reviewed publications.
+It is **not** certified to ISO 26262, DO-178C, IEC 61508, or any other
+functional-safety standard, and it ships without warranty (see License).
+The generated headers are meant for research, teaching, and prototyping on
+embedded targets. Anyone deploying them on a system that can injure people
+or damage property is responsible for their own verification, validation,
+and certification.
+
+Please record the exact release (`pip show dual_cbf_compiler`, or the version
+string written into the header banner) alongside any generated `dual_cbf.h`
+so that results are reproducible.
+
 ## Install
 
 ```bash
@@ -172,12 +186,30 @@ asserts agreement to single-precision machine epsilon.
 
 ## Layout
 
-```
-dual_cbf_compiler/
-  ir.py        — Internal representation (LinearLayer, ActivationLayer)
-  parser.py    — parse_pytorch, parse_onnx (both accept relative_degree)
-  emitter.py   — emit_cpp_header
-  verify.py    — Pytest suite (PyTorch autograd vs g++-compiled binary)
-  cli.py       — dual-cbf-compile entry point
-setup.py
-```
+## Assumptions and limitations
+
+- **Relative degree 1.** The network may use ReLU. At a ReLU kink the emitted
+  code returns the one-sided derivative selected by the forward pass; see the
+  non-smooth paper below for the conditions under which this preserves the
+  barrier certificate.
+- **Relative degree 2 (hyper-dual).** Requires twice-differentiable
+  activations (e.g. softplus, tanh). The compiler rejects ReLU in this mode
+  on purpose.
+- **Dynamics are supplied by you.** The header evaluates `h`, `L_f h`, and
+  `L_g h` (and second-order terms) for the `f`, `G` you pass in. Model error,
+  `G` layout (row-major, `n x m`), and units are the caller's responsibility.
+- **The QP is not included.** Feasibility of the CBF constraint, the choice of
+  `alpha(h)`, sampling-rate effects, and actuator limits must be handled in
+  the caller's control loop.
+- **Numerics.** Emitted code uses `float` (32-bit). Use `double` on targets
+  that need it by editing the generated typedef.
+
+
+
+
+
+## License
+
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE). 
