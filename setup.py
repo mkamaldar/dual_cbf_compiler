@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="dual_cbf_compiler",
-    version="0.1.0",
+    version="0.1.1",
     author="Mohammadreza Kamaldar",
     author_email="mkamaldar@southalabama.edu",
     description=(
