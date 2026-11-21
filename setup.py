@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="dual_cbf_compiler",
-    version="0.1.1",
+    version="0.2.0",
     author="Mohammadreza Kamaldar",
     author_email="mkamaldar@southalabama.edu",
     description=(
@@ -18,8 +18,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/mkamaldar/dual_cbf_compiler",
-        project_urls={
-        "Paper": "https://arxiv.org/pdf/2604.23995",
+    project_urls={
+        "Paper": "https://drive.google.com/file/d/1ryW5-aeYk7cyXl2FccErl3kusam0zbzE/view?usp=sharing",
         "Source": "https://github.com/mkamaldar/dual_cbf_compiler",
         "Hardware experiments": "https://github.com/mkamaldar/dual_cbf_esp32_experiments",
     },
@@ -27,9 +27,7 @@ setup(
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: Apache Software License",
-        "Operating System :: POSIX :: Linux",
-        "Operating System :: MacOS",
+        "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",

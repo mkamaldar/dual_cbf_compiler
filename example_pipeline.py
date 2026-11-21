@@ -48,7 +48,7 @@ int main() {
     // Kinematic bicycle state (px, py, psi, v) and dynamics
     float x[4]   = {1.0f, 2.0f, 0.3f, 5.0f};
     float f[4]   = {x[3] * cosf(x[2]), x[3] * sinf(x[2]), 0.0f, 0.0f};
-    // G(x) column-major: 4x2
+    // G(x), flattened row-major: 4x2 (element (i, j) at G[i * m + j])
     //   col 0 = [0, 0, 0, 1]^T  (acceleration input)
     //   col 1 = [0, 0, v/L, 0]^T  (steering input, L = 2.5 m)
     int m = 2;

@@ -127,6 +127,12 @@ def parse_pytorch(
 
         elif cls_name in _TORCH_ACTIVATION_MAP:
             kind = _TORCH_ACTIVATION_MAP[cls_name]
+            if kind == "softplus" and float(getattr(module, "beta", 1.0)) != 1.0:
+                raise ValueError(
+                    f"Softplus with beta={module.beta} is not supported. The "
+                    "emitted code implements log(1 + exp(x)), which is "
+                    "Softplus with beta=1 (the PyTorch default)."
+                )
             if relative_degree == 2 and kind == "relu":
                 raise ValueError(
                     "ReLU activations are not allowed when relative_degree=2. "

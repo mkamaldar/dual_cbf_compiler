@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dual_cbf_compiler.ir import ActivationLayer, LinearLayer, ParsedNetwork
 
@@ -157,3 +157,18 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def test_parser_rejects_softplus_with_nondefault_beta():
+    import pytest
+
+    torch = pytest.importorskip("torch")
+    nn = torch.nn
+    from dual_cbf_compiler import parse_pytorch
+
+    bad = nn.Sequential(nn.Linear(2, 4), nn.Softplus(beta=2.0), nn.Linear(4, 1))
+    with pytest.raises(ValueError, match="beta"):
+        parse_pytorch(bad)
+
+    good = nn.Sequential(nn.Linear(2, 4), nn.Softplus(), nn.Linear(4, 1))
+    assert parse_pytorch(good).depth == 2

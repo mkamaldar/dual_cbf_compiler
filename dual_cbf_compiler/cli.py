@@ -70,6 +70,16 @@ def main(argv: list[str] | None = None) -> int:
         help="C++ namespace for the emitted code.",
     )
     p.add_argument(
+        "-m", "--inputs",
+        type=int,
+        default=None,
+        help=(
+            "Number of control inputs m (relative degree 1 only). If given, "
+            "the header also contains evaluate_cbf_shared, which evaluates "
+            "h, L_f h, and L_G h in one sweep with the primal computed once."
+        ),
+    )
+    p.add_argument(
         "--torch-arch",
         type=str,
         default=None,
@@ -117,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         network,
         relative_degree=args.relative_degree,
         namespace=args.namespace,
+        n_inputs=args.inputs if args.relative_degree == 1 else None,
     )
     args.output.write_text(header)
     print(

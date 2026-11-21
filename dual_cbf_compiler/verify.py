@@ -529,3 +529,88 @@ def test_emitter_documents_row_major_g() -> None:
     assert "ROW-MAJOR" in header
     assert "G[i * m + j]" in header
     assert "G2D" in header
+
+
+# ---------------------------------------------------------------------------
+# Version 0.2.0: shared-primal sweep and the high-order entry point
+# ---------------------------------------------------------------------------
+
+_DRIVER_SHARED = _DRIVER_FIRST_ORDER.replace(
+    "dual_cbf::evaluate_cbf(x, f, G, m, &h, &Lf, Lg);",
+    "dual_cbf::evaluate_cbf_shared(x, f, G, &h, &Lf, Lg);",
+)
+
+_DRIVER_HOCBF = _DRIVER_SECOND_ORDER.replace(
+    "float L2f;\n    float LgLf[64];\n"
+    "    dual_cbf::evaluate_cbf_2nd_order(x, f, G, Df_f, Df_G, m, &L2f, LgLf);",
+    "float h, Lf, L2f;\n    float LgLf[64];\n"
+    "    dual_cbf::evaluate_hocbf(x, f, G, Df_f, Df_G, m, &h, &Lf, &L2f, LgLf);",
+).replace(
+    "fwrite(&L2f, sizeof(float), 1, op);",
+    "fwrite(&h, sizeof(float), 1, op);\n    fwrite(&Lf, sizeof(float), 1, op);\n"
+    "    fwrite(&L2f, sizeof(float), 1, op);",
+)
+
+
+@pytest.mark.parametrize(
+    "builder,widths,m,seed",
+    [
+        (_build_relu_net, [4, 16, 16, 1], 2, 40),
+        (_build_relu_net, [2, 32, 32, 32, 32, 1], 1, 41),
+        (_build_softplus_net, [3, 16, 16, 1], 3, 42),
+        (_build_tanh_net, [2, 8, 8, 8, 1], 1, 43),
+    ],
+)
+def test_shared_sweep_matches_sequential(builder, widths: List[int], m: int, seed: int) -> None:
+    """evaluate_cbf_shared agrees with autograd and with evaluate_cbf."""
+    assert "evaluate_cbf_shared" in _DRIVER_SHARED
+    model = builder(widths, seed)
+    parsed = parse_pytorch(model)
+    n = widths[0]
+    rng = np.random.default_rng(seed + 500)
+    x = _bias_inputs_relu_safe(rng, n)
+    f = rng.standard_normal(n).astype(np.float32)
+    G = rng.standard_normal((n, m)).astype(np.float32)
+    h_ref, Lf_ref, Lg_ref = _torch_lie_first_order(model, x, f, G)
+
+    header = emit_cpp_header(parsed, relative_degree=1, n_inputs=m)
+    payload = x.tobytes() + f.tobytes() + G.tobytes()
+    seq = _compile_and_run(header, _DRIVER_FIRST_ORDER, n, payload, m, expect_floats=2 + m)
+    sha = _compile_and_run(header, _DRIVER_SHARED, n, payload, m, expect_floats=2 + m)
+    ref = np.concatenate([[h_ref, Lf_ref], np.asarray(Lg_ref).ravel()]).astype(np.float32)
+    np.testing.assert_allclose(seq, ref, rtol=_RTOL, atol=_ATOL)
+    np.testing.assert_allclose(sha, ref, rtol=_RTOL, atol=_ATOL)
+    np.testing.assert_allclose(sha, seq, rtol=_RTOL, atol=_ATOL)
+
+
+def test_header_without_inputs_has_no_shared_entry() -> None:
+    parsed = parse_pytorch(_build_relu_net([3, 8, 1], 44))
+    assert "evaluate_cbf_shared" not in emit_cpp_header(parsed, relative_degree=1)
+    assert "real_cache" not in emit_cpp_header(parsed, relative_degree=1)
+
+
+@pytest.mark.parametrize("widths,seed", [([3, 8, 8, 1], 50), ([2, 12, 12, 1], 51)])
+def test_hocbf_entry_point(widths: List[int], seed: int) -> None:
+    """evaluate_hocbf returns h, L_f h, L_f^2 h, and L_g L_f h."""
+    assert "evaluate_hocbf" in _DRIVER_HOCBF
+    model = _build_softplus_net(widths, seed)
+    parsed = parse_pytorch(model, relative_degree=2)
+    n = widths[0]
+    m = 2
+    rng = np.random.default_rng(seed + 600)
+    x = rng.standard_normal(n).astype(np.float32) * 0.5
+    f = rng.standard_normal(n).astype(np.float32)
+    G = rng.standard_normal((n, m)).astype(np.float32)
+    Df = rng.standard_normal((n, n)).astype(np.float32)
+    Df_f = (Df @ f).astype(np.float32)
+    Df_G = (Df @ G).astype(np.float32)
+    h_ref, Lf_ref, _ = _torch_lie_first_order(model, x, f, G)
+    L2f_ref, LgLf_ref = _torch_lie_second_order(model, x, f, Df_f, G, Df_G)
+
+    header = emit_cpp_header(parsed, relative_degree=2)
+    payload = x.tobytes() + f.tobytes() + G.tobytes() + Df_f.tobytes() + Df_G.tobytes()
+    out = _compile_and_run(header, _DRIVER_HOCBF, n, payload, m, expect_floats=3 + m)
+    assert abs(float(out[0]) - h_ref) <= _ATOL + _RTOL * abs(h_ref)
+    assert abs(float(out[1]) - Lf_ref) <= _ATOL + _RTOL * abs(Lf_ref)
+    assert abs(float(out[2]) - L2f_ref) <= 1e-3 + 1e-3 * abs(L2f_ref)
+    np.testing.assert_allclose(out[3:], LgLf_ref, rtol=1e-3, atol=1e-3)
