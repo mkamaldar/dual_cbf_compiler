@@ -16,7 +16,7 @@ This repository accompanies the paper
 The measurements of the paper on an ESP32-S3 microcontroller are produced by
 a separate repository, [`dual_cbf_esp32_experiments`][experiments].
 
-[paper]: https://drive.google.com/file/d/1ryW5-aeYk7cyXl2FccErl3kusam0zbzE/view?usp=sharing
+[paper]: https://arxiv.org/pdf/2604.23995
 [experiments]: https://github.com/mkamaldar/dual_cbf_esp32_experiments
 [pypi]: https://pypi.org/project/dual-cbf-compiler/
 
