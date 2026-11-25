@@ -379,7 +379,7 @@ dual_cbf_compiler/
   title  = {Extracting exact {L}ie derivatives without backpropagation:
             {A} dual compiler for neural control barrier functions},
   year   = {2026},
-  url    = {https://drive.google.com/file/d/1ryW5-aeYk7cyXl2FccErl3kusam0zbzE/view?usp=sharing}
+  url    = {https://arxiv.org/pdf/2604.23995}
 }
 ```
 
